@@ -222,12 +222,12 @@ async def {func_name}(request_data: Dict[str, Any] = None):
     def _generate_requirements(self, service_def: ServiceDefinition) -> str:
         """Generate requirements.txt."""
         requirements = [
-            "fastapi==0.104.1",
-            "uvicorn==0.24.0",
-            "httpx==0.25.2",
-            "opentelemetry-api==1.21.0",
-            "opentelemetry-sdk==1.21.0",
-            "opentelemetry-exporter-jaeger==1.21.0",
+            "fastapi>=0.118.0",
+            "uvicorn>=0.37.0",
+            "httpx>=0.28.1",
+            "opentelemetry-api>=1.37.0",
+            "opentelemetry-sdk>=1.37.0",
+            "opentelemetry-exporter-jaeger>=1.21.0",
             "deprecated>=1.2.14",  # Required by jaeger exporter
         ]
 
@@ -235,14 +235,14 @@ async def {func_name}(request_data: Dict[str, Any] = None):
         if self._has_database_dependencies(service_def):
             requirements.extend(
                 [
-                    "asyncpg==0.29.0",
-                    "sqlalchemy==2.0.23",
+                    "asyncpg==0.30.0",
+                    "sqlalchemy==2.0.36",
                 ]
             )
 
         # Add Redis dependencies
         if self._has_redis_dependencies(service_def):
-            requirements.append("redis==5.0.1")
+            requirements.append("redis==5.2.1")
 
         return "\n".join(requirements)
 

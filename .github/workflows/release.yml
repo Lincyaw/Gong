@@ -8,7 +8,7 @@ on:
     types: [published]
 
 env:
-  PYTHON_VERSION: "3.11"
+  PYTHON_VERSION: "3.12"
 
 jobs:
   test:
@@ -35,9 +35,9 @@ jobs:
         run: |
           uv run pytest tests/ -v --cov=src/gong --cov-report=xml
       
-      - name: Run demo
+      - name: Run demo tests
         run: |
-          uv run python demo.py
+          uv run pytest tests/integration/test_demo.py -v
 
   build:
     name: Build Package

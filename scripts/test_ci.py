@@ -43,7 +43,7 @@ def main():
         ("uv run ruff format --check src/ tests/", "Code formatting check"),
         ("uv run mypy src/gong/core/", "Type checking"),
         ("uv run pytest tests/unit/ -v --tb=short", "Unit tests"),
-        ("uv run python demo.py", "Demo test"),
+        ("uv run pytest tests/integration/test_demo.py -v", "Demo integration tests"),
         ("uv run gong --help", "CLI test"),
     ]
     

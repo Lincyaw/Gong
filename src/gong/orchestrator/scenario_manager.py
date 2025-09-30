@@ -3,7 +3,7 @@ Scenario management for orchestrating timeline events.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -31,7 +31,7 @@ class ScenarioManager:
             "simulation_id": simulation_id,
             "scenario": scenario,
             "status": "running",
-            "started_at": datetime.utcnow(),
+            "started_at": datetime.now(UTC),
             "events_executed": [],
         }
 
@@ -87,7 +87,7 @@ class ScenarioManager:
         """Execute scenario timeline events."""
         try:
             scenario_info = self.active_scenarios[scenario_id]
-            start_time = datetime.utcnow()
+            start_time = datetime.now(UTC)
 
             # Sort events by timestamp
             sorted_events = sorted(
@@ -100,7 +100,7 @@ class ScenarioManager:
 
                 # Calculate when to execute this event
                 event_time = self._parse_timestamp(event.timestamp)
-                elapsed = (datetime.utcnow() - start_time).total_seconds()
+                elapsed = (datetime.now(UTC) - start_time).total_seconds()
 
                 if event_time > elapsed:
                     # Wait until it's time for this event
@@ -116,7 +116,10 @@ class ScenarioManager:
                 # Execute the event
                 await self._execute_event(scenario_id, simulation_id, event)
                 scenario_info["events_executed"].append(
-                    {"event": event.dict(), "executed_at": datetime.utcnow().isoformat()}
+                    {
+                        "event": event.model_dump(),
+                        "executed_at": datetime.now(UTC).isoformat(),
+                    }
                 )
 
             # Mark scenario as completed
@@ -154,8 +157,8 @@ class ScenarioManager:
         """Execute a traffic generation event."""
         config = event.config
 
-        if hasattr(config, "dict"):
-            pattern = config.dict()
+        if hasattr(config, "model_dump"):
+            pattern = config.model_dump()
         else:
             pattern = config
 
@@ -172,8 +175,8 @@ class ScenarioManager:
         """Execute a chaos engineering event."""
         config = event.config
 
-        if hasattr(config, "dict"):
-            experiment = config.dict()
+        if hasattr(config, "model_dump"):
+            experiment = config.model_dump()
         else:
             experiment = config
 

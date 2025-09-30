@@ -4,12 +4,12 @@ Core domain models for the microservice simulation platform.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class SimulationStatus(str, Enum):
@@ -167,31 +167,66 @@ class Scenario(BaseModel):
 class SimulationSpec(BaseModel):
     """Complete simulation specification."""
 
-    name: str
-    description: str | None = None
-    services: list[ServiceDefinition] = Field(default_factory=list)
-    scenario: Scenario | None = None
-    global_config: dict[str, Any] = Field(default_factory=dict)
+    model_config = ConfigDict(str_strip_whitespace=True, validate_assignment=True, extra="forbid")
+
+    name: str = Field(min_length=1, description="Simulation name cannot be empty")
+    description: str | None = Field(None, description="Optional description of the simulation")
+    services: list[ServiceDefinition] = Field(
+        default_factory=list, description="List of microservices to deploy"
+    )
+    scenario: Scenario | None = Field(None, description="Optional scenario for dynamic behavior")
+    global_config: dict[str, Any] = Field(
+        default_factory=dict, description="Global configuration settings"
+    )
+
+    @computed_field
+    @property
+    def service_count(self) -> int:
+        """Number of services in this simulation."""
+        return len(self.services)
 
 
 class Simulation(BaseModel):
     """Runtime simulation instance."""
 
-    id: UUID = Field(default_factory=uuid4)
-    name: str
-    status: SimulationStatus = SimulationStatus.PENDING
-    spec: SimulationSpec
-    namespace: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    error_message: str | None = None
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
-    @validator("namespace", always=True)
-    def generate_namespace(cls, v: str | None, values: dict[str, Any]) -> str:
-        """Generate namespace from simulation ID if not provided."""
-        if v is None and "id" in values:
-            return f"sim-{str(values['id'])[:8]}"
-        return v or "default"
+    id: UUID = Field(default_factory=uuid4, description="Unique simulation identifier")
+    name: str = Field(description="Human-readable simulation name")
+    status: SimulationStatus = Field(
+        default=SimulationStatus.PENDING, description="Current simulation status"
+    )
+    spec: SimulationSpec = Field(description="Simulation specification")
+    namespace: str | None = Field(None, description="Kubernetes namespace")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), description="When the simulation was created"
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        description="When the simulation was last updated",
+    )
+    error_message: str | None = Field(None, description="Error message if simulation failed")
+
+    def __init__(self, **data: Any) -> None:
+        """Initialize simulation with auto-generated namespace if not provided."""
+        if "namespace" not in data or data["namespace"] is None:
+            if "id" in data:
+                data["namespace"] = f"sim-{str(data['id'])[:8]}"
+            else:
+                # Generate a temporary ID for namespace generation
+                temp_id = uuid4()
+                data["namespace"] = f"sim-{str(temp_id)[:8]}"
+        super().__init__(**data)
+
+    @computed_field
+    @property
+    def is_active(self) -> bool:
+        """Whether the simulation is currently active."""
+        return self.status in [
+            SimulationStatus.BUILDING,
+            SimulationStatus.DEPLOYING,
+            SimulationStatus.RUNNING,
+        ]
 
 
 class ActionRequest(BaseModel):
@@ -209,4 +244,4 @@ class ActionResult(BaseModel):
     status: str
     result: Any | None = None
     error: str | None = None
-    executed_at: datetime = Field(default_factory=datetime.utcnow)
+    executed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -79,11 +79,11 @@ uv run platform-server
 ### 运行演示
 
 ```bash
-# 运行完整演示
-python scripts/start-dev.py demo
+# 运行演示测试
+make demo
 
 # 或者直接运行
-python demo.py
+uv run pytest tests/integration/test_demo.py -v
 ```
 
 ### 使用CLI

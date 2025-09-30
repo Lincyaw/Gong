@@ -17,7 +17,6 @@ help:
 	@echo "  lint            Run linting and type checking"
 	@echo "  format          Format code"
 	@echo "  clean           Clean up generated files"
-	@echo "  cleanup-debug   Clean debug code from source"
 	@echo "  server          Start API server"
 	@echo "  ci              Run full CI pipeline"
 	@echo "  security        Run security checks"
@@ -37,8 +36,8 @@ dev:
 
 # Run demo
 demo:
-	@echo "🎯 Running demo..."
-	uv run python demo.py
+	@echo "🎯 Running demo integration tests..."
+	uv run pytest tests/integration/test_demo.py -v
 
 # Run all tests
 test:
@@ -90,11 +89,6 @@ clean:
 	rm -rf output/
 	@echo "✅ Cleanup complete"
 
-# Clean debug code from source
-cleanup-debug:
-	@echo "🧹 Cleaning debug code..."
-	uv run python scripts/cleanup_debug.py
-	@echo "✅ Debug cleanup complete"
 
 # Start API server
 server:
@@ -104,7 +98,7 @@ server:
 # Run security checks
 security:
 	@echo "🔒 Running security checks..."
-	uv run pip install safety bandit
+	uv add --dev safety bandit
 	uv run safety check --json --output safety-report.json || true
 	uv run bandit -r src/ -f json -o bandit-report.json || true
 	@echo "📄 Security reports generated: safety-report.json, bandit-report.json"
@@ -116,7 +110,7 @@ build:
 	@echo "✅ Package built in dist/"
 
 # Full CI pipeline
-ci: cleanup-debug format lint test-unit test-integration demo security
+ci: format lint test-unit test-integration demo security
 	@echo "✅ Full CI pipeline completed successfully"
 
 # Pre-commit checks (fast)
@@ -147,5 +141,5 @@ health:
 	@echo "3. Testing CLI..."
 	uv run gong --help > /dev/null && echo "✅ CLI works"
 	@echo "4. Testing demo..."
-	timeout 30s uv run python demo.py > /dev/null && echo "✅ Demo runs" || echo "⚠️  Demo timeout (expected)"
+	uv run pytest tests/integration/test_demo.py -q > /dev/null && echo "✅ Demo tests pass" || echo "⚠️  Demo tests failed"
 	@echo "✅ Health check complete"

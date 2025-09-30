@@ -5,7 +5,7 @@ Modern Python protocols and type definitions using latest typing features.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Mapping, Sequence
-from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 # Type variables for generic protocols
 T = TypeVar("T")
@@ -28,7 +28,7 @@ class Serializable(Protocol):
 
 
 @runtime_checkable
-class AsyncRepository(Protocol, Generic[T]):
+class AsyncRepository[T](Protocol):
     """Generic async repository protocol."""
 
     async def save(self, entity: T) -> None:
@@ -162,7 +162,7 @@ QueryParams = dict[str, str | list[str]]
 
 
 # Generic result type for operations that can fail
-class Result(Generic[T]):
+class Result[T]:
     """Result type for operations that can succeed or fail."""
 
     def __init__(self, value: T | None = None, error: Exception | None = None):

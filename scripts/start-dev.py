@@ -53,14 +53,14 @@ def start_api_server():
 
 
 def run_demo():
-    """Run the demo script."""
-    print("🎯 Running demo...")
-
-    demo_script = project_root / "demo.py"
-    if demo_script.exists():
-        subprocess.run([sys.executable, str(demo_script)])
-    else:
-        print("❌ Demo script not found")
+    """Run the demo integration tests."""
+    print("🎯 Running demo integration tests...")
+    
+    try:
+        import pytest
+        pytest.main([str(project_root / "tests" / "integration" / "test_demo.py"), "-v"])
+    except ImportError:
+        print("❌ pytest not installed. Install with: uv sync --dev")
 
 
 def run_tests():

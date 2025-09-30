@@ -3,7 +3,7 @@ Post-deployment verification engine.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -27,7 +27,7 @@ class KubernetesVerificationEngine(VerificationEngine):
         verification_report = {
             "simulation_id": simulation_id,
             "namespace": namespace,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "overall_status": "unknown",
             "checks": {},
         }
@@ -325,7 +325,7 @@ class DummyVerificationEngine(VerificationEngine):
 
         return {
             "simulation_id": simulation_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "overall_status": "pass",
             "checks": {
                 "resource_health": {"status": "pass", "summary": "All pods are running and ready"},

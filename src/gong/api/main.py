@@ -2,33 +2,96 @@
 Main FastAPI application for the simulation platform.
 """
 
-from typing import Any
+from datetime import UTC, datetime
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from ..core.models import ActionRequest, ActionResult, Simulation, SimulationSpec, SimulationStatus
-from .dependencies import get_dependencies
+from .dependencies import Dependencies, get_dependencies
 
 app = FastAPI(
     title="Microservice Simulation Platform",
     description="AI-powered platform for generating dynamic microservice environments",
     version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    summary="Generate and manage microservice simulations for AIOps research and LLM training",
+    contact={
+        "name": "Platform Team",
+        "email": "team@example.com",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify actual origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-@app.get("/health")
-async def health_check():
+# Custom OpenAPI schema
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    openapi_schema["info"]["x-logo"] = {
+        "url": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png"
+    }
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
+@app.get(
+    "/health",
+    tags=["Health"],
+    summary="Health Check",
+    description="Check if the simulation platform is healthy and operational",
+    response_description="Health status information",
+)
+async def health_check() -> dict[str, str]:
     """Health check endpoint."""
-    return {"status": "healthy", "service": "simulation-platform"}
+    return {
+        "status": "healthy",
+        "service": "simulation-platform",
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
 
 
-@app.post("/api/v1/simulations", response_model=dict[str, str])
+@app.post(
+    "/api/v1/simulations",
+    response_model=dict[str, str],
+    tags=["Simulations"],
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Simulation",
+    description="Create and deploy a new microservice simulation environment",
+    response_description="Simulation creation confirmation with ID and status",
+)
 async def create_simulation(
-    spec: SimulationSpec, background_tasks: BackgroundTasks
+    spec: SimulationSpec,
+    background_tasks: BackgroundTasks,
+    deps: Annotated[Dependencies, Depends(get_dependencies)],
 ) -> dict[str, str]:
     """Create and deploy a new simulation environment."""
-    deps = get_dependencies()
 
     # Create simulation instance
     simulation = Simulation(name=spec.name, spec=spec, status=SimulationStatus.PENDING)
@@ -42,10 +105,11 @@ async def create_simulation(
     return {"simulation_id": str(simulation.id), "status": simulation.status.value}
 
 
-@app.get("/api/v1/simulations/{simulation_id}")
-async def get_simulation(simulation_id: str) -> dict[str, Any]:
+@app.get("/api/v1/simulations/{simulation_id}", tags=["Simulations"])
+async def get_simulation(
+    simulation_id: str, deps: Annotated[Dependencies, Depends(get_dependencies)]
+) -> dict[str, Any]:
     """Get simulation details and status."""
-    deps = get_dependencies()
 
     simulation = await deps.simulation_repo.get_simulation(simulation_id)
     if not simulation:
@@ -66,10 +130,11 @@ async def get_simulation(simulation_id: str) -> dict[str, Any]:
     }
 
 
-@app.get("/api/v1/simulations")
-async def list_simulations() -> list[dict[str, Any]]:
+@app.get("/api/v1/simulations", tags=["Simulations"])
+async def list_simulations(
+    deps: Annotated[Dependencies, Depends(get_dependencies)],
+) -> list[dict[str, Any]]:
     """List all simulations."""
-    deps = get_dependencies()
 
     simulations = await deps.simulation_repo.list_simulations()
 
@@ -84,12 +149,13 @@ async def list_simulations() -> list[dict[str, Any]]:
     ]
 
 
-@app.delete("/api/v1/simulations/{simulation_id}")
+@app.delete("/api/v1/simulations/{simulation_id}", tags=["Simulations"])
 async def delete_simulation(
-    simulation_id: str, background_tasks: BackgroundTasks
+    simulation_id: str,
+    background_tasks: BackgroundTasks,
+    deps: Annotated[Dependencies, Depends(get_dependencies)],
 ) -> dict[str, str]:
     """Delete a simulation environment."""
-    deps = get_dependencies()
 
     simulation = await deps.simulation_repo.get_simulation(simulation_id)
     if not simulation:
@@ -101,10 +167,13 @@ async def delete_simulation(
     return {"message": "Deletion scheduled"}
 
 
-@app.post("/api/v1/simulations/{simulation_id}/actions")
-async def execute_action(simulation_id: str, action: ActionRequest) -> ActionResult:
+@app.post("/api/v1/simulations/{simulation_id}/actions", tags=["Actions"])
+async def execute_action(
+    simulation_id: str,
+    action: ActionRequest,
+    deps: Annotated[Dependencies, Depends(get_dependencies)],
+) -> ActionResult:
     """Execute an action within a simulation (for LLM agents)."""
-    deps = get_dependencies()
 
     simulation = await deps.simulation_repo.get_simulation(simulation_id)
     if not simulation:
@@ -119,17 +188,17 @@ async def execute_action(simulation_id: str, action: ActionRequest) -> ActionRes
     return result
 
 
-@app.get("/api/v1/templates")
-async def list_templates() -> list[str]:
+@app.get("/api/v1/templates", tags=["Templates"])
+async def list_templates(deps: Annotated[Dependencies, Depends(get_dependencies)]) -> list[str]:
     """List available code templates."""
-    deps = get_dependencies()
     return await deps.template_registry.list_templates()
 
 
-@app.post("/api/v1/simulations/{simulation_id}/verify")
-async def verify_simulation(simulation_id: str) -> dict[str, Any]:
+@app.post("/api/v1/simulations/{simulation_id}/verify", tags=["Verification"])
+async def verify_simulation(
+    simulation_id: str, deps: Annotated[Dependencies, Depends(get_dependencies)]
+) -> dict[str, Any]:
     """Verify simulation health and connectivity."""
-    deps = get_dependencies()
 
     simulation = await deps.simulation_repo.get_simulation(simulation_id)
     if not simulation:
@@ -141,10 +210,13 @@ async def verify_simulation(simulation_id: str) -> dict[str, Any]:
     return verification_result
 
 
-@app.post("/api/v1/simulations/{simulation_id}/traffic")
-async def start_traffic(simulation_id: str, pattern: dict[str, Any]) -> dict[str, str]:
+@app.post("/api/v1/simulations/{simulation_id}/traffic", tags=["Traffic"])
+async def start_traffic(
+    simulation_id: str,
+    pattern: dict[str, Any],
+    deps: Annotated[Dependencies, Depends(get_dependencies)],
+) -> dict[str, str]:
     """Start traffic generation for a simulation."""
-    deps = get_dependencies()
 
     simulation = await deps.simulation_repo.get_simulation(simulation_id)
     if not simulation:
@@ -159,20 +231,24 @@ async def start_traffic(simulation_id: str, pattern: dict[str, Any]) -> dict[str
     return {"traffic_job_id": job_id, "status": "started"}
 
 
-@app.delete("/api/v1/traffic/{job_id}")
-async def stop_traffic(job_id: str) -> dict[str, str]:
+@app.delete("/api/v1/traffic/{job_id}", tags=["Traffic"])
+async def stop_traffic(
+    job_id: str, deps: Annotated[Dependencies, Depends(get_dependencies)]
+) -> dict[str, str]:
     """Stop traffic generation."""
-    deps = get_dependencies()
 
     await deps.traffic_generator.stop_traffic(job_id)
 
     return {"message": "Traffic generation stopped"}
 
 
-@app.post("/api/v1/simulations/{simulation_id}/chaos")
-async def inject_chaos(simulation_id: str, experiment: dict[str, Any]) -> dict[str, str]:
+@app.post("/api/v1/simulations/{simulation_id}/chaos", tags=["Chaos"])
+async def inject_chaos(
+    simulation_id: str,
+    experiment: dict[str, Any],
+    deps: Annotated[Dependencies, Depends(get_dependencies)],
+) -> dict[str, str]:
     """Inject chaos experiment into a simulation."""
-    deps = get_dependencies()
 
     simulation = await deps.simulation_repo.get_simulation(simulation_id)
     if not simulation:
@@ -187,20 +263,24 @@ async def inject_chaos(simulation_id: str, experiment: dict[str, Any]) -> dict[s
     return {"experiment_id": experiment_id, "status": "started"}
 
 
-@app.delete("/api/v1/chaos/{experiment_id}")
-async def stop_chaos(experiment_id: str) -> dict[str, str]:
+@app.delete("/api/v1/chaos/{experiment_id}", tags=["Chaos"])
+async def stop_chaos(
+    experiment_id: str, deps: Annotated[Dependencies, Depends(get_dependencies)]
+) -> dict[str, str]:
     """Stop chaos experiment."""
-    deps = get_dependencies()
 
     await deps.chaos_engine.stop_experiment(experiment_id)
 
     return {"message": "Chaos experiment stopped"}
 
 
-@app.post("/api/v1/simulations/{simulation_id}/scenario")
-async def start_scenario(simulation_id: str, scenario: dict[str, Any]) -> dict[str, str]:
+@app.post("/api/v1/simulations/{simulation_id}/scenario", tags=["Scenarios"])
+async def start_scenario(
+    simulation_id: str,
+    scenario: dict[str, Any],
+    deps: Annotated[Dependencies, Depends(get_dependencies)],
+) -> dict[str, str]:
     """Start a scenario for a simulation."""
-    deps = get_dependencies()
 
     simulation = await deps.simulation_repo.get_simulation(simulation_id)
     if not simulation:
@@ -220,10 +300,11 @@ async def start_scenario(simulation_id: str, scenario: dict[str, Any]) -> dict[s
     return {"scenario_id": scenario_id, "status": "started"}
 
 
-@app.get("/api/v1/scenarios/{scenario_id}")
-async def get_scenario_status(scenario_id: str) -> dict[str, Any]:
+@app.get("/api/v1/scenarios/{scenario_id}", tags=["Scenarios"])
+async def get_scenario_status(
+    scenario_id: str, deps: Annotated[Dependencies, Depends(get_dependencies)]
+) -> dict[str, Any]:
     """Get scenario execution status."""
-    deps = get_dependencies()
 
     status = await deps.scenario_manager.get_scenario_status(scenario_id)
     if not status:
@@ -232,20 +313,22 @@ async def get_scenario_status(scenario_id: str) -> dict[str, Any]:
     return status
 
 
-@app.delete("/api/v1/scenarios/{scenario_id}")
-async def stop_scenario(scenario_id: str) -> dict[str, str]:
+@app.delete("/api/v1/scenarios/{scenario_id}", tags=["Scenarios"])
+async def stop_scenario(
+    scenario_id: str, deps: Annotated[Dependencies, Depends(get_dependencies)]
+) -> dict[str, str]:
     """Stop a running scenario."""
-    deps = get_dependencies()
 
     await deps.scenario_manager.stop_scenario(scenario_id)
 
     return {"message": "Scenario stopped"}
 
 
-@app.post("/api/v1/generate")
-async def generate_config(prompt: dict[str, str]) -> dict[str, Any]:
+@app.post("/api/v1/generate", tags=["AI"])
+async def generate_config(
+    prompt: dict[str, str], deps: Annotated[Dependencies, Depends(get_dependencies)]
+) -> dict[str, Any]:
     """Generate simulation configuration from natural language prompt."""
-    deps = get_dependencies()
 
     user_prompt = prompt.get("prompt", "")
     if not user_prompt:
@@ -254,7 +337,7 @@ async def generate_config(prompt: dict[str, str]) -> dict[str, Any]:
     # Generate configuration using LLM architect
     spec = await deps.llm_architect.generate_config(user_prompt)
 
-    return {"generated_spec": spec.dict(), "message": "Configuration generated successfully"}
+    return {"generated_spec": spec.model_dump(), "message": "Configuration generated successfully"}
 
 
 async def deploy_simulation_task(simulation_id: UUID, deps) -> None:

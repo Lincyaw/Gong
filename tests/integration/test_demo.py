@@ -145,3 +145,85 @@ class TestDemoIntegration:
         # Should have multiple check categories
         checks = result["checks"]
         assert len(checks) > 0
+
+    async def test_scenario_management_integration(self, deps):
+        """Test scenario management integration."""
+        from gong.core.models import Scenario, ScenarioEvent, TrafficPattern
+
+        # Create a test scenario
+        scenario = Scenario(
+            name="test-scenario",
+            description="Test scenario for integration",
+            events=[
+                ScenarioEvent(
+                    timestamp="0s",
+                    type="traffic",
+                    config=TrafficPattern(
+                        name="test-traffic", type="constant", params={"users": 5, "duration": "5s"}
+                    ),
+                )
+            ],
+        )
+
+        simulation_id = "test-sim-scenario"
+
+        # Start scenario
+        scenario_id = await deps.scenario_manager.start_scenario(simulation_id, scenario)
+        assert scenario_id is not None
+
+        # Check scenario status
+        import asyncio
+
+        await asyncio.sleep(1)  # Give it time to start
+
+        status = await deps.scenario_manager.get_scenario_status(scenario_id)
+        assert status is not None
+        assert status["status"] in ["running", "completed"]
+
+        # Stop scenario
+        await deps.scenario_manager.stop_scenario(scenario_id)
+
+    async def test_action_execution_integration(self, deps):
+        """Test action execution integration."""
+        from gong.core.models import ActionRequest
+
+        simulation_id = "test-sim-actions"
+
+        # Test various action types
+        actions = [
+            ActionRequest(action_type="kubectl_get", params={"resource_type": "pods"}),
+            ActionRequest(action_type="kubectl_logs", target="test-service", params={"lines": 10}),
+        ]
+
+        for action in actions:
+            result = await deps.action_executor.execute_action(simulation_id, action)
+            assert result.status in ["COMPLETED", "FAILED"]
+            assert result.action_id is not None
+
+    async def test_simulation_lifecycle_integration(self, deps):
+        """Test complete simulation lifecycle."""
+        from gong.core.models import Simulation
+
+        # 1. Generate config
+        spec = await deps.llm_architect.generate_config("Create a test service")
+
+        # 2. Create simulation
+        simulation = Simulation(name="lifecycle-test", spec=spec)
+
+        # 3. Save simulation
+        await deps.simulation_repo.save_simulation(simulation)
+
+        # 4. Deploy simulation (dummy)
+        await deps.orchestrator.deploy_simulation(simulation)
+
+        # 5. Get status
+        status = await deps.orchestrator.get_simulation_status(str(simulation.id))
+        assert "status" in status
+
+        # 6. Verify simulation
+        verification = await deps.verification_engine.verify_simulation(str(simulation.id))
+        assert verification["overall_status"] in ["pass", "fail", "partial", "error"]
+
+        # 7. Clean up
+        await deps.orchestrator.destroy_simulation(str(simulation.id))
+        await deps.simulation_repo.delete_simulation(str(simulation.id))
