@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # Main application
+  gong:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/.venv  # Exclude virtual environment from volume mount
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    command: python src/gong/api/main.py --reload
+
+  # Redis for caching and session storage
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # PostgreSQL for testing (optional)
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=gong_test
+      - POSTGRES_USER=gong
+      - POSTGRES_PASSWORD=gong_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Test runner service
+  test:
+    build:
+      context: .
+      target: development
+    volumes:
+      - .:/app
+      - /app/.venv
+    environment:
+      - ENVIRONMENT=testing
+      - REDIS_URL=redis://redis:6379/1
+      - DATABASE_URL=postgresql://gong:gong_password@postgres:5432/gong_test
+    depends_on:
+      - redis
+      - postgres
+    command: pytest tests/ -v
+    profiles:
+      - test
+
+  # CI runner service
+  ci:
+    build:
+      context: .
+      target: development
+    volumes:
+      - .:/app
+      - /app/.venv
+    environment:
+      - ENVIRONMENT=testing
+      - REDIS_URL=redis://redis:6379/2
+    depends_on:
+      - redis
+    command: make ci
+    profiles:
+      - ci
+
+volumes:
+  redis_data:
+  postgres_data:
