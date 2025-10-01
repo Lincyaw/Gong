@@ -52,6 +52,44 @@
 ### 安装
 
 ```bash
+# 克隆仓库
+git clone <repository-url>
+cd gong
+
+# 安装依赖
+uv sync
+```
+
+### 体验演示
+
+```bash
+# 生成简单的三服务演示
+uv run python examples/three-service-demo/simple_demo.py
+
+# 测试生成的代码
+uv run python examples/three-service-demo/test_demo.py --output-dir output/simple-demo
+
+# 完整 Kubernetes 部署演示
+uv run python examples/three-service-demo/generate_demo.py
+cd output/deployable-demo && ./deploy.sh
+```
+
+### CLI 使用
+
+```bash
+# 从自然语言生成微服务
+uv run python -m src.gong.cli codegen "创建一个用户管理服务"
+
+# 启动 API 服务器
+uv run python -m src.main
+
+# 查看可用模板
+uv run python -m src.gong.cli templates
+```
+
+### 安装
+
+```bash
 # 克隆项目
 git clone <repository-url>
 cd microservice-simulation-platform

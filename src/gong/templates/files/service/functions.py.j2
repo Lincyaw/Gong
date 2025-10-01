@@ -1,0 +1,43 @@
+"""
+Custom business logic functions for {{ service_name }}.
+"""
+
+from typing import Any, Dict
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+async def calculate_order_total(price: float, quantity: int, discount_level: str = "none") -> float:
+    """Calculate order total with discount."""
+    total = price * quantity
+    
+    discounts = {
+        "bronze": 0.05,
+        "silver": 0.10,
+        "gold": 0.15,
+        "platinum": 0.20
+    }
+    
+    discount = discounts.get(discount_level, 0.0)
+    return total * (1 - discount)
+
+
+async def validate_user_permissions(user_id: str, action: str) -> bool:
+    """Validate user permissions for an action."""
+    # Simplified permission check
+    # In real implementation, this would check against a permission system
+    return True
+
+
+async def process_payment(amount: float, payment_method: str) -> Dict[str, Any]:
+    """Process payment (mock implementation)."""
+    # Mock payment processing
+    import uuid
+    
+    return {
+        "transaction_id": str(uuid.uuid4()),
+        "status": "completed",
+        "amount": amount,
+        "method": payment_method
+    }

@@ -41,6 +41,7 @@ dependencies = [
     "opentelemetry-exporter-jaeger>=1.21.0",
     "pyjwt[crypto]>=2.10.1",
     "python-multipart>=0.0.20",
+    "urllib3>=2.5.0",
 ]
 
 [project.optional-dependencies]
@@ -196,7 +197,7 @@ exclude_lines = [
 
 [dependency-groups]
 dev = [
-    "bandit",
+    "bandit>=1.8.6",
     "black>=25.9.0",
     "isort>=6.0.1",
     "mypy>=1.18.2",
@@ -204,6 +205,5 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
     "ruff>=0.13.2",
-    "safety",
     "types-pyyaml>=6.0.12.20250915",
 ]

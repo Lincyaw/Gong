@@ -1,0 +1,12 @@
+# PostgreSQL write
+from sqlalchemy import text
+async with get_db_session() as session:
+    query = "{{ params.query }}"
+    {% if params.get('query_params') %}
+    query_params = context.get('query_params', [])
+    await session.execute(text(query), query_params)
+    {% else %}
+    await session.execute(text(query))
+    {% endif %}
+    await session.commit()
+    result = {"status": "success"}

@@ -87,6 +87,7 @@ clean:
 	find . -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf output/
+	rm -f bandit-report.json
 	@echo "✅ Cleanup complete"
 
 
@@ -98,10 +99,9 @@ server:
 # Run security checks
 security:
 	@echo "🔒 Running security checks..."
-	uv add --dev safety bandit
-	uv run safety check --json --output safety-report.json || true
+	uv add --dev bandit
 	uv run bandit -r src/ -f json -o bandit-report.json || true
-	@echo "📄 Security reports generated: safety-report.json, bandit-report.json"
+	@echo "📄 Security report generated: bandit-report.json"
 
 # Build package
 build:

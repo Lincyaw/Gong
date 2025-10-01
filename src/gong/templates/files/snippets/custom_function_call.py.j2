@@ -1,0 +1,35 @@
+# Custom function call
+function_name = "{{ params.functionName }}"
+{% if params.get('arguments') %}
+# Prepare function arguments
+args = {}
+{% for arg_name, arg_value in params.arguments.items() %}
+{% if arg_value is string and arg_value.startswith('{context.') %}
+args['{{ arg_name }}'] = context{{ arg_value[8:-1] }}  # Remove {context and }
+{% else %}
+args['{{ arg_name }}'] = {{ arg_value | tojson }}
+{% endif %}
+{% endfor %}
+
+# Call the function
+if function_name == "calculate_order_total":
+    result = await calculate_order_total(**args)
+elif function_name == "validate_user_permissions":
+    result = await validate_user_permissions(**args)
+elif function_name == "process_payment":
+    result = await process_payment(**args)
+else:
+    # Dynamic function call (if function exists in globals)
+    if function_name in globals():
+        func = globals()[function_name]
+        result = await func(**args)
+    else:
+        raise ValueError(f"Unknown function: {function_name}")
+{% else %}
+# Call function without arguments
+if function_name in globals():
+    func = globals()[function_name]
+    result = await func()
+else:
+    raise ValueError(f"Unknown function: {function_name}")
+{% endif %}

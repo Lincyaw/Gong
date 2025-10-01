@@ -1,0 +1,14 @@
+# HTTP API call to {{ params.target_service }}
+target_service = "{{ params.target_service }}"
+path = "{{ params.path }}"
+method = "{{ params.get('method', 'GET') }}"
+
+# Replace context variables in path
+{% if '{' in params.path %}
+path = path.format(**context)
+{% endif %}
+
+url = f"http://{target_service}:80{path}"
+response = await http_client.request(method, url)
+response.raise_for_status()
+result = response.json()

@@ -1,0 +1,97 @@
+templates:
+  control_flow/parallel_execution:
+    code_template: snippets/parallel_execution.py.j2
+    description: Execute multiple operations in parallel
+    input_schema:
+      branches: list
+    name: Parallel Execution
+    output_schema:
+      parallel_results: dict
+  control_flow/return_http_response:
+    code_template: snippets/return_response.py.j2
+    description: Return HTTP response
+    input_schema:
+      body: dict
+      status_code: int
+    name: Return HTTP Response
+    output_schema: {}
+  io/http_api_call:
+    code_template: snippets/http_api_call.py.j2
+    dependencies:
+    - httpx>=0.25.0
+    description: Make HTTP API call to another service
+    input_schema:
+      method: str
+      path: str
+      target_service: str
+    name: HTTP API Call
+    output_schema:
+      api_response: dict
+  io/postgres_query:
+    code_template: snippets/postgres_query.py.j2
+    dependencies:
+    - sqlalchemy[asyncio]>=2.0.0
+    - asyncpg>=0.29.0
+    description: Execute PostgreSQL query
+    input_schema:
+      params: list
+      query: str
+    name: PostgreSQL Query
+    output_schema:
+      query_result: list
+  io/postgres_write:
+    code_template: snippets/postgres_write.py.j2
+    dependencies:
+    - sqlalchemy[asyncio]>=2.0.0
+    - asyncpg>=0.29.0
+    description: Execute PostgreSQL write operation
+    input_schema:
+      query: str
+      query_params: list
+    name: PostgreSQL Write
+    output_schema:
+      write_result: dict
+  io/redis_get:
+    code_template: snippets/redis_get.py.j2
+    dependencies:
+    - redis[hiredis]>=5.0.0
+    description: Get value from Redis
+    input_schema:
+      key: str
+    name: Redis GET
+    output_schema:
+      redis_value: str
+  io/redis_set:
+    code_template: snippets/redis_set.py.j2
+    dependencies:
+    - redis[hiredis]>=5.0.0
+    description: Set value in Redis
+    input_schema:
+      key: str
+      ttl: int
+      value: str
+    name: Redis SET
+    output_schema:
+      redis_result: dict
+  logic/custom_function_call:
+    code_template: snippets/custom_function_call.py.j2
+    description: Call custom business logic function
+    input_schema:
+      arguments: dict
+      functionName: str
+    name: Custom Function Call
+    output_schema:
+      function_result: any
+    requires_custom_functions: true
+  security/jwt_token_validation:
+    code_template: snippets/jwt_validation.py.j2
+    dependencies:
+    - pyjwt>=2.8.0
+    - cryptography>=41.0.0
+    description: Validate JWT token
+    input_schema:
+      jwks_url: str
+      token: str
+    name: JWT Token Validation
+    output_schema:
+      user_info: dict

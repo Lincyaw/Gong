@@ -1,0 +1,31 @@
+"""
+Configuration settings for {{ service_name }}.
+"""
+
+import os
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    SERVICE_NAME: str = os.getenv('SERVICE_NAME', '{{ service_name }}')
+    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
+    JAEGER_HOST: str = os.getenv('JAEGER_HOST', 'jaeger')
+    JAEGER_PORT: int = int(os.getenv('JAEGER_PORT', '14268'))
+    
+    {% if has_database %}
+    DATABASE_URL: str = os.getenv('DATABASE_URL', 'postgresql+asyncpg://postgres:password@localhost:5432/postgres')
+    {% endif %}
+    
+    {% if has_redis %}
+    REDIS_URL: str = os.getenv('REDIS_URL', 'redis://localhost:6379')
+    {% endif %}
+    
+    {% for dep in service.dependencies.get('services', []) %}
+    {{ dep.upper().replace('-', '_') }}_URL: str = os.getenv('{{ dep.upper().replace('-', '_') }}_URL', 'http://{{ dep }}:80')
+    {% endfor %}
+    
+    class Config:
+        env_file = ".env"
+
+
+settings = Settings()

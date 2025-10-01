@@ -1,0 +1,79 @@
+name: simple-demo
+description: "Simple three-service demo"
+
+services:
+  - name: user-service
+    replicas: 1
+    dependencies:
+      services: []
+      datastores:
+        - name: users-db
+          type: postgres
+    endpoints:
+      - path: /v1/users/{user_id}
+        method: GET
+        workflow:
+          - name: get_user
+            template: io/postgres_query
+            params:
+              query: "SELECT * FROM users WHERE id = $1"
+            output: user_data
+
+  - name: product-service
+    replicas: 1
+    dependencies:
+      services: []
+      datastores:
+        - name: products-db
+          type: postgres
+        - name: product-cache
+          type: redis
+    endpoints:
+      - path: /v1/products/{product_id}
+        method: GET
+        workflow:
+          - name: get_product
+            template: io/postgres_query
+            params:
+              query: "SELECT * FROM products WHERE id = $1"
+            output: product_data
+
+  - name: order-service
+    replicas: 1
+    dependencies:
+      services:
+        - user-service
+        - product-service
+      datastores:
+        - name: orders-db
+          type: postgres
+    endpoints:
+      - path: /v1/orders
+        method: POST
+        workflow:
+          - name: get_user_info
+            template: io/http_api_call
+            params:
+              target_service: user-service
+              path: "/v1/users/{body.userId}"
+              method: GET
+            output: user_profile
+          - name: get_product_info
+            template: io/http_api_call
+            params:
+              target_service: product-service
+              path: "/v1/products/{body.productId}"
+              method: GET
+            output: product_details
+          - name: calculate_total
+            template: logic/custom_function_call
+            params:
+              functionName: calculate_order_total
+              arguments:
+                price: "{context.product_details.price}"
+                quantity: "{body.quantity}"
+            output: final_price
+          - name: save_order
+            template: io/postgres_write
+            params:
+              query: "INSERT INTO orders (user_id, total) VALUES ($1, $2)"

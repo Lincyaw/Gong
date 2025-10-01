@@ -76,16 +76,16 @@ class InMemoryTemplateRegistry(TemplateRegistry):
         api_call_template = BaseTemplate(
             name="io/http_api_call",
             template_code="""
-# HTTP API call to {{ params.target_service }}
+# HTTP API call to {{ target_service }}
 async with httpx.AsyncClient() as client:
-    response = await client.{{ params.method|lower }}(
-        f"http://{{ params.target_service }}.{namespace}.svc.cluster.local{{ params.path }}",
-        {% if params.json %}json={{ params.json }},{% endif %}
-        {% if params.headers %}headers={{ params.headers }},{% endif %}
+    response = await client.{{ method|lower|default('get') }}(
+        f"http://{{ target_service }}.{{ namespace }}.svc.cluster.local{{ path }}",
+        {% if json %}json={{ json }},{% endif %}
+        {% if headers %}headers={{ headers }},{% endif %}
         timeout=30.0
     )
     response.raise_for_status()
-    {% if output_schema %}{{ context_var }}["{{ params.output or 'api_response' }}"] = response.json(){% endif %}
+    result = response.json()
 """,
             input_schema={"target_service": "str", "path": "str", "method": "str"},
             output_schema={"api_response": "dict"},
@@ -96,13 +96,13 @@ async with httpx.AsyncClient() as client:
             name="io/postgres_query",
             template_code="""
 # Database query
-async with get_db_connection("{{ params.datastore_name }}") as conn:
-    {% if params.query_params %}
-    result = await conn.fetch("{{ params.query }}", {{ params.query_params|join(', ') }})
+async with get_db_connection("{{ datastore_name }}") as conn:
+    {% if query_params %}
+    rows = await conn.fetch("{{ query }}", {{ query_params|join(', ') }})
     {% else %}
-    result = await conn.fetch("{{ params.query }}")
+    rows = await conn.fetch("{{ query }}")
     {% endif %}
-    {% if output_schema %}{{ context_var }}["{{ params.output or 'query_result' }}"] = [dict(row) for row in result]{% endif %}
+    result = [dict(row) for row in rows] if rows else []
 """,
             input_schema={"datastore_name": "str", "query": "str"},
             output_schema={"query_result": "list"},
@@ -139,8 +139,8 @@ except jwt.InvalidTokenError:
             template_code="""
 # Return HTTP response
 return JSONResponse(
-    status_code={{ params.status_code or 200 }},
-    content={{ params.body or '{}' }}
+    status_code={{ status_code or 200 }},
+    content={{ body if body is string else (body|tojson if body else '{}') }}
 )
 """,
             input_schema={"status_code": "int", "body": "dict"},
@@ -188,13 +188,13 @@ finally:
             name="io/postgres_write",
             template_code="""
 # Database write operation
-async with get_db_connection("{{ params.datastore_name }}") as conn:
-    {% if params.query_params %}
-    result = await conn.fetchrow("{{ params.query }}", {{ params.query_params|join(', ') }})
+async with get_db_connection("{{ datastore_name }}") as conn:
+    {% if query_params %}
+    row = await conn.fetchrow("{{ query }}", {{ query_params|join(', ') }})
     {% else %}
-    result = await conn.execute("{{ params.query }}")
+    row = await conn.execute("{{ query }}")
     {% endif %}
-    {% if output_schema %}{{ context_var }}["{{ params.output or 'write_result' }}"] = dict(result) if result else None{% endif %}
+    result = dict(row) if row else {"status": "success"}
 """,
             input_schema={"datastore_name": "str", "query": "str"},
             output_schema={"write_result": "dict"},
@@ -251,14 +251,13 @@ branch_results = await asyncio.gather(*branch_tasks)
             name="logic/custom_function_call",
             template_code="""
 # Custom function call
-from .functions import {{ params.function_name }}
+from .functions import {{ function_name }}
 
-result = {{ params.function_name }}(
-    {% for arg_name, arg_value in params.arguments.items() %}
+result = {{ function_name }}(
+    {% for arg_name, arg_value in arguments.items() %}
     {{ arg_name }}={{ arg_value }},
     {% endfor %}
 )
-{% if output_schema %}{{ context_var }}["{{ params.output or 'function_result' }}"] = result{% endif %}
 """,
             input_schema={"function_name": "str", "arguments": "dict"},
             output_schema={"function_result": "any"},

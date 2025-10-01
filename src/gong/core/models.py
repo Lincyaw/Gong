@@ -180,7 +180,6 @@ class SimulationSpec(BaseModel):
     )
 
     @computed_field
-    @property
     def service_count(self) -> int:
         """Number of services in this simulation."""
         return len(self.services)
@@ -219,7 +218,6 @@ class Simulation(BaseModel):
         super().__init__(**data)
 
     @computed_field
-    @property
     def is_active(self) -> bool:
         """Whether the simulation is currently active."""
         return self.status in [

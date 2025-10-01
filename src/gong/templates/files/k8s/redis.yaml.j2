@@ -1,0 +1,99 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ name }}
+  namespace: {{ namespace }}
+  labels:
+    app: {{ name }}
+    type: cache
+    cache-type: redis
+    managed-by: gong
+spec:
+  replicas: {{ replicas | default(1) }}
+  selector:
+    matchLabels:
+      app: {{ name }}
+  template:
+    metadata:
+      labels:
+        app: {{ name }}
+        type: cache
+        cache-type: redis
+    spec:
+      containers:
+      - name: redis
+        image: {{ image | default("redis:6") }}
+        ports:
+        - containerPort: 6379
+          name: redis
+        resources:
+          requests:
+            cpu: {{ (resources.requests.cpu if resources.requests else resources.cpu) | default("50m") }}
+            memory: {{ (resources.requests.memory if resources.requests else resources.memory) | default("128Mi") }}
+          limits:
+            cpu: {{ (resources.limits.cpu if resources.limits else resources.cpu) | default("200m") }}
+            memory: {{ (resources.limits.memory if resources.limits else resources.memory) | default("256Mi") }}
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        {% if persistence.enabled | default(false) %}
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        {% endif %}
+      {% if persistence.enabled | default(false) %}
+      volumes:
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: {{ name }}-pvc
+      {% endif %}
+---
+{% if persistence.enabled | default(false) %}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ name }}-pvc
+  namespace: {{ namespace }}
+  labels:
+    app: {{ name }}
+    type: cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ persistence.size | default("5Gi") }}
+  {% if persistence.storage_class %}
+  storageClassName: {{ persistence.storage_class }}
+  {% endif %}
+---
+{% endif %}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ name }}
+  namespace: {{ namespace }}
+  labels:
+    app: {{ name }}
+    type: cache
+    cache-type: redis
+spec:
+  selector:
+    app: {{ name }}
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  type: ClusterIP

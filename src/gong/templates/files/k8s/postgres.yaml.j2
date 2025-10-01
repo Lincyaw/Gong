@@ -1,0 +1,110 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ name }}
+  namespace: {{ namespace }}
+  labels:
+    app: {{ name }}
+    type: database
+    database-type: postgres
+    managed-by: gong
+spec:
+  replicas: {{ replicas | default(1) }}
+  selector:
+    matchLabels:
+      app: {{ name }}
+  template:
+    metadata:
+      labels:
+        app: {{ name }}
+        type: database
+        database-type: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: {{ image | default("postgres:14") }}
+        env:
+        - name: POSTGRES_DB
+          value: {{ database_name | default("postgres") }}
+        - name: POSTGRES_USER
+          value: {{ username | default("postgres") }}
+        - name: POSTGRES_PASSWORD
+          value: {{ password | default("password") }}
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+          name: postgres
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            cpu: {{ (resources.requests.cpu if resources.requests else resources.cpu) | default("100m") }}
+            memory: {{ (resources.requests.memory if resources.requests else resources.memory) | default("256Mi") }}
+          limits:
+            cpu: {{ (resources.limits.cpu if resources.limits else resources.cpu) | default("500m") }}
+            memory: {{ (resources.limits.memory if resources.limits else resources.memory) | default("512Mi") }}
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - {{ username | default("postgres") }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - {{ username | default("postgres") }}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: postgres-storage
+        {% if persistence.enabled | default(false) %}
+        persistentVolumeClaim:
+          claimName: {{ name }}-pvc
+        {% else %}
+        emptyDir: {}
+        {% endif %}
+---
+{% if persistence.enabled | default(false) %}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ name }}-pvc
+  namespace: {{ namespace }}
+  labels:
+    app: {{ name }}
+    type: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ persistence.size | default("10Gi") }}
+  {% if persistence.storage_class %}
+  storageClassName: {{ persistence.storage_class }}
+  {% endif %}
+---
+{% endif %}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ name }}
+  namespace: {{ namespace }}
+  labels:
+    app: {{ name }}
+    type: database
+    database-type: postgres
+spec:
+  selector:
+    app: {{ name }}
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgres
+  type: ClusterIP

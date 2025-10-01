@@ -1,3 +1,3 @@
 """
-Template library system for code generation.
+Template management module.
 """

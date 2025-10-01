@@ -10,8 +10,8 @@ import click
 import httpx
 from pydantic import ValidationError
 
-from .core.models import SimulationSpec
-from .llm.architect import DummyLLMArchitect
+from ..core.models import SimulationSpec
+from ..llm.architect import DummyLLMArchitect
 
 
 @click.group()
@@ -307,7 +307,7 @@ async def generate_code(
     try:
         if config_file:
             # Use configuration file
-            from .cli.config_generator import ConfigDrivenGenerator
+            from .config_generator import ConfigDrivenGenerator
 
             # Resolve config file path
             config_path = Path(config_file)
@@ -330,7 +330,7 @@ async def generate_code(
 
         else:
             # Use natural language prompt
-            from .llm.architect import DummyLLMArchitect
+            from ..llm.architect import DummyLLMArchitect
 
             architect = DummyLLMArchitect()
             spec = await architect.generate_config(prompt)
@@ -344,8 +344,6 @@ async def generate_code(
 
             # Save configuration if requested
             if save_config:
-                from pathlib import Path
-
                 import yaml
 
                 config_path = Path(output_dir) / "simulation.yaml"
@@ -357,12 +355,14 @@ async def generate_code(
                 click.echo(f"📄 Saved configuration to {config_path}")
 
             # Generate code using config generator
-            from .cli.config_generator import ConfigDrivenGenerator
+            from .config_generator import ConfigDrivenGenerator
 
             generator = ConfigDrivenGenerator()
 
             # Create temporary config file
             import tempfile
+
+            import yaml
 
             with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
                 yaml.dump(spec.model_dump(), f, default_flow_style=False)

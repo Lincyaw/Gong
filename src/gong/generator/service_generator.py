@@ -1,324 +1,252 @@
 """
-Service code generator implementation.
+Service code generator for microservices.
 """
 
 from pathlib import Path
+from typing import Any
 
-from ..core.interfaces import CodeGenerator, TemplateRegistry
+import jinja2
+
 from ..core.models import ServiceDefinition, WorkflowStep
+from ..templates.loader import TemplateLoader
 
 
-class FastAPIServiceGenerator(CodeGenerator):
-    """Generates FastAPI-based microservices."""
+class ServiceCodeGenerator:
+    """Generate FastAPI service code from service definitions."""
 
-    def __init__(self, template_registry: TemplateRegistry):
-        self.template_registry = template_registry
+    def __init__(self, template_dir: str = None):
+        self.template_loader = TemplateLoader(template_dir)
 
-    async def generate_service(self, service_def: ServiceDefinition) -> dict[str, str]:
+        # Initialize Jinja2 environment
+        self.jinja_env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(self.template_loader.template_dir),
+            autoescape=False,
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+
+    async def generate_service_code(self, service_def: ServiceDefinition, output_dir: Path):
         """Generate complete service code."""
-        files = {}
+
+        # Create directory structure
+        src_dir = output_dir / "src"
+        src_dir.mkdir(parents=True, exist_ok=True)
+
+        # Prepare template context
+        context = self._prepare_template_context(service_def)
 
         # Generate main application file
-        files["src/main.py"] = await self._generate_main_py(service_def)
+        main_py = self._render_template("service/main.py.j2", context)
+        (src_dir / "main.py").write_text(main_py)
 
-        # Generate requirements.txt
-        files["requirements.txt"] = self._generate_requirements(service_def)
-
-        # Generate Dockerfile
-        files["Dockerfile"] = self._generate_dockerfile()
-
-        # Generate configuration
-        files["src/config.py"] = self._generate_config()
+        # Generate configuration file
+        config_py = self._render_template("service/config.py.j2", context)
+        (src_dir / "config.py").write_text(config_py)
 
         # Generate database utilities if needed
-        if self._has_database_dependencies(service_def):
-            files["src/database.py"] = self._generate_database_utils()
+        if context["has_database"]:
+            database_py = self._render_template("service/database.py.j2", context)
+            (src_dir / "database.py").write_text(database_py)
 
-        return files
+        # Generate custom functions if needed
+        if context["has_custom_functions"]:
+            functions_py = self._render_template("service/functions.py.j2", context)
+            (src_dir / "functions.py").write_text(functions_py)
 
-    async def generate_and_save_service(
-        self, service_def: ServiceDefinition, output_dir: str | None = None
-    ) -> dict[str, str]:
-        """Generate service code and save to files."""
-        # Generate the code
-        files = await self.generate_service(service_def)
+        # Generate requirements.txt
+        requirements = self._render_template("service/requirements.txt.j2", context)
+        (output_dir / "requirements.txt").write_text(requirements)
 
-        # Determine output directory
-        if output_dir is None:
-            output_dir = f"output/{service_def.name}"
+        # Generate Dockerfile
+        dockerfile = self._render_template("service/Dockerfile.j2", context)
+        (output_dir / "Dockerfile").write_text(dockerfile)
 
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
+        # Generate .dockerignore
+        dockerignore = self._render_template("service/dockerignore.j2", context)
+        (output_dir / ".dockerignore").write_text(dockerignore)
 
-        # Write files to disk
-        for file_path, content in files.items():
-            full_path = output_path / file_path
-            full_path.parent.mkdir(parents=True, exist_ok=True)
+    def _prepare_template_context(self, service_def: ServiceDefinition) -> dict[str, Any]:
+        """Prepare context data for template rendering."""
 
-            with open(full_path, "w", encoding="utf-8") as f:
-                f.write(content)
+        # Analyze service dependencies
+        has_database = self._has_database_dependencies(service_def)
+        has_redis = self._has_redis_dependencies(service_def)
+        has_custom_functions = self._has_custom_functions(service_def)
 
-        print(f"✅ Generated service '{service_def.name}' in {output_path}")
-        print("📁 Files created:")
-        for file_path in files.keys():
-            print(f"   - {output_path / file_path}")
+        # Get required Python packages
+        required_packages = self._get_required_packages(service_def)
 
-        return files
-
-    async def _generate_main_py(self, service_def: ServiceDefinition) -> str:
-        """Generate the main FastAPI application."""
-        imports = self._generate_imports(service_def)
-        app_init = self._generate_app_initialization(service_def)
-        endpoints = await self._generate_endpoints(service_def)
-
-        return f"""
-{imports}
-
-{app_init}
-
-{endpoints}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-"""
-
-    def _generate_imports(self, service_def: ServiceDefinition) -> str:
-        """Generate import statements."""
-        imports = [
-            "import asyncio",
-            "import os",
-            "from typing import Dict, Any",
-            "",
-            "from fastapi import FastAPI, HTTPException",
-            "from fastapi.responses import JSONResponse",
-            "import httpx",
-        ]
-
-        # Add database imports if needed
-        if self._has_database_dependencies(service_def):
-            imports.extend(
-                [
-                    "import asyncpg",
-                    "from .database import get_db_connection",
-                ]
-            )
-
-        # Add observability imports
-        imports.extend(
-            [
-                "",
-                "# OpenTelemetry imports",
-                "from opentelemetry import trace",
-                "from opentelemetry.exporter.jaeger.thrift import JaegerExporter",
-                "from opentelemetry.sdk.trace import TracerProvider",
-                "from opentelemetry.sdk.trace.export import BatchSpanProcessor",
-            ]
-        )
-
-        return "\n".join(imports)
-
-    def _generate_app_initialization(self, service_def: ServiceDefinition) -> str:
-        """Generate FastAPI app initialization."""
-        return f'''
-# Initialize FastAPI app
-app = FastAPI(
-    title="{service_def.name}",
-    description="Generated microservice",
-    version="1.0.0"
-)
-
-# Initialize OpenTelemetry
-trace.set_tracer_provider(TracerProvider())
-tracer = trace.get_tracer(__name__)
-
-jaeger_exporter = JaegerExporter(
-    agent_host_name=os.getenv("JAEGER_AGENT_HOST", "jaeger"),
-    agent_port=int(os.getenv("JAEGER_AGENT_PORT", "6831")),
-)
-
-span_processor = BatchSpanProcessor(jaeger_exporter)
-trace.get_tracer_provider().add_span_processor(span_processor)
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {{"status": "healthy", "service": "{service_def.name}"}}
-'''
-
-    async def _generate_endpoints(self, service_def: ServiceDefinition) -> str:
-        """Generate endpoint handlers."""
-        endpoints = []
-
+        # Process endpoints and workflows
+        processed_endpoints = []
         for endpoint in service_def.endpoints:
-            endpoint_code = await self._generate_endpoint_handler(endpoint, service_def.namespace)
-            endpoints.append(endpoint_code)
+            processed_endpoint = {
+                "path": endpoint.path,
+                "method": endpoint.method.lower(),
+                "function_name": self._generate_function_name(endpoint.path),
+                "workflow_steps": self._process_workflow_steps(endpoint.workflow, service_def),
+                "has_path_params": "{" in endpoint.path,
+                "path_params": self._extract_path_params(endpoint.path),
+                "needs_request_body": endpoint.method.upper() in ["POST", "PUT", "PATCH"],
+            }
+            processed_endpoints.append(processed_endpoint)
 
-        return "\n\n".join(endpoints)
+        return {
+            "service": service_def,
+            "service_name": service_def.name,
+            "namespace": getattr(service_def, "_namespace", "default"),
+            "has_database": has_database,
+            "has_redis": has_redis,
+            "has_custom_functions": has_custom_functions,
+            "required_packages": required_packages,
+            "endpoints": processed_endpoints,
+            "observability": service_def.observability,
+            "resources": service_def.resources,
+        }
 
-    async def _generate_endpoint_handler(self, endpoint, namespace: str) -> str:
-        """Generate a single endpoint handler."""
-        method = endpoint.method.lower()
-
-        # Generate function signature
-        func_name = (
-            f"handle_{endpoint.path.replace('/', '_').replace('{', '').replace('}', '').strip('_')}"
-        )
-
-        # Generate workflow steps
-        workflow_code = await self._generate_workflow_steps(endpoint.workflow, namespace)
-
-        return f'''
-@app.{method}("{endpoint.path}")
-async def {func_name}(request_data: Dict[str, Any] = None):
-    """Generated endpoint handler for {endpoint.path}."""
-    with tracer.start_as_current_span("{func_name}"):
-        context = {{"request": request_data or {{}}}}
-
-        try:
-{workflow_code}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-'''
-
-    async def _generate_workflow_steps(self, workflow: list[WorkflowStep], namespace: str) -> str:
-        """Generate code for workflow steps."""
-        steps = []
+    def _process_workflow_steps(
+        self, workflow: list[WorkflowStep], service_def: ServiceDefinition
+    ) -> list[dict[str, Any]]:
+        """Process workflow steps for template rendering."""
+        processed_steps = []
 
         for step in workflow:
-            template = await self.template_registry.get_template(step.template)
+            # Load template for this step
+            template_config = self.template_loader.get_template_config(step.template)
 
-            # Add fault injection wrapper if needed
-            step_code = template.render(step.params, "context")
+            processed_step = {
+                "name": step.name,
+                "template": step.template,
+                "params": step.params,
+                "output": step.output,
+                "inject_faults": step.inject_faults,
+                "on_failure": step.on_failure,
+                "template_config": template_config,
+                "code_snippet": self._generate_step_code_snippet(step, template_config),
+            }
+            processed_steps.append(processed_step)
 
+        return processed_steps
+
+    def _generate_step_code_snippet(
+        self, step: WorkflowStep, template_config: dict[str, Any]
+    ) -> str:
+        """Generate code snippet for a workflow step."""
+
+        # Get the code template for this step type
+        code_template_path = template_config.get("code_template")
+        if not code_template_path:
+            return f"        # TODO: Implement template {step.template}"
+
+        # Prepare context for code template
+        context = {"step": step, "params": step.params, "template_config": template_config}
+
+        # Render the code template
+        try:
+            code_snippet = self._render_template(code_template_path, context)
+
+            # Add fault injection if specified
             if step.inject_faults:
-                step_code = self._wrap_with_fault_injection(step_code, step.inject_faults)
+                fault_code = self._generate_fault_injection_code(step.inject_faults)
+                code_snippet = fault_code + "\n" + code_snippet
 
-            steps.append(f"            # Step: {step.name}")
-            # Properly indent the step code
-            indented_step_code = "\n".join(
-                f"            {line}" if line.strip() else line for line in step_code.split("\n")
+            # Add output assignment if specified
+            if step.output:
+                code_snippet += f"\n        context['{step.output}'] = result"
+
+            return code_snippet
+
+        except Exception as e:
+            return f"        # Error rendering template {step.template}: {e}"
+
+    def _generate_fault_injection_code(self, faults) -> str:
+        """Generate fault injection code."""
+        try:
+            fault_template = self._render_template(
+                "snippets/fault_injection.py.j2", {"faults": faults}
             )
-            steps.append(indented_step_code)
+            return fault_template
+        except Exception:
+            # Fallback to simple fault injection
+            return "        # Fault injection placeholder"
 
-        return "\n".join(steps)
+    def _render_template(self, template_path: str, context: dict[str, Any]) -> str:
+        """Render a Jinja2 template."""
+        try:
+            template = self.jinja_env.get_template(template_path)
+            return template.render(**context)
+        except jinja2.TemplateNotFound:
+            raise ValueError(f"Template not found: {template_path}")
+        except Exception as e:
+            raise ValueError(f"Error rendering template {template_path}: {e}")
 
-    def _wrap_with_fault_injection(self, code: str, faults) -> str:
-        """Wrap code with fault injection logic."""
-        fault_code = []
+    def _generate_function_name(self, path: str) -> str:
+        """Generate function name from endpoint path."""
+        func_name = path.replace("/", "_").replace("{", "").replace("}", "").strip("_")
+        if func_name.startswith("v1_"):
+            func_name = func_name[3:]
+        return func_name or "root"
 
-        for fault in faults:
-            if fault.type == "latency":
-                fault_code.append(f"""
-            # Inject latency fault
-            import random
-            if random.random() < {fault.probability}:
-                import asyncio
-                await asyncio.sleep({fault.value.split("(")[1].split(",")[0]}/1000)  # Convert ms to seconds
-""")
+    def _extract_path_params(self, path: str) -> list[str]:
+        """Extract path parameters from endpoint path."""
+        import re
 
-        return "\n".join(fault_code) + "\n" + code
+        return re.findall(r"\{(\w+)\}", path)
 
-    def _generate_requirements(self, service_def: ServiceDefinition) -> str:
-        """Generate requirements.txt."""
-        requirements = [
-            "fastapi>=0.118.0",
-            "uvicorn>=0.37.0",
-            "httpx>=0.28.1",
-            "opentelemetry-api>=1.37.0",
-            "opentelemetry-sdk>=1.37.0",
-            "opentelemetry-exporter-jaeger>=1.21.0",
-            "deprecated>=1.2.14",  # Required by jaeger exporter
+    def _get_required_packages(self, service_def: ServiceDefinition) -> list[str]:
+        """Get list of required Python packages based on service definition."""
+        packages = [
+            "fastapi>=0.104.0",
+            "uvicorn[standard]>=0.24.0",
+            "httpx>=0.25.0",
+            "pydantic>=2.4.0",
+            "pydantic-settings>=2.0.0",
         ]
 
         # Add database dependencies
         if self._has_database_dependencies(service_def):
-            requirements.extend(
+            packages.extend(
                 [
-                    "asyncpg==0.30.0",
-                    "sqlalchemy==2.0.36",
+                    "sqlalchemy[asyncio]>=2.0.0",
+                    "asyncpg>=0.29.0",
                 ]
             )
 
         # Add Redis dependencies
         if self._has_redis_dependencies(service_def):
-            requirements.append("redis==5.2.1")
+            packages.extend(
+                [
+                    "redis[hiredis]>=5.0.0",
+                ]
+            )
 
-        return "\n".join(requirements)
-
-    def _generate_dockerfile(self) -> str:
-        """Generate Dockerfile."""
-        return """
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY src/ ./src/
-
-EXPOSE 8000
-
-CMD ["python", "-m", "src.main"]
-"""
-
-    def _generate_config(self) -> str:
-        """Generate configuration module."""
-        return '''
-"""
-Service configuration.
-"""
-import os
-from typing import Optional
-
-class Config:
-    """Service configuration."""
-
-    # Database configuration
-    DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
-
-    # Redis configuration
-    REDIS_URL: Optional[str] = os.getenv("REDIS_URL")
-
-    # Observability
-    JAEGER_AGENT_HOST: str = os.getenv("JAEGER_AGENT_HOST", "jaeger")
-    JAEGER_AGENT_PORT: int = int(os.getenv("JAEGER_AGENT_PORT", "6831"))
-
-    # Service discovery
-    NAMESPACE: str = os.getenv("NAMESPACE", "default")
-
-config = Config()
-'''
-
-    def _generate_database_utils(self) -> str:
-        """Generate database utilities."""
-        return '''
-"""
-Database utilities.
-"""
-import asyncpg
-from contextlib import asynccontextmanager
-from .config import config
-
-@asynccontextmanager
-async def get_db_connection(datastore_name: str = "default"):
-    """Get database connection."""
-    # In a real implementation, this would use service discovery
-    # to find the actual database connection string
-    conn = await asyncpg.connect(config.DATABASE_URL)
-    try:
-        yield conn
-    finally:
-        await conn.close()
-'''
+        return list(set(packages))
 
     def _has_database_dependencies(self, service_def: ServiceDefinition) -> bool:
         """Check if service has database dependencies."""
         datastores = service_def.dependencies.get("datastores", [])
-        return any(ds.type in ["postgres", "mysql"] for ds in datastores if hasattr(ds, "type"))
+        for ds in datastores:
+            if hasattr(ds, "type"):
+                if ds.type in ["postgres", "mysql", "mongodb"]:
+                    return True
+            elif isinstance(ds, dict) and ds.get("type") in ["postgres", "mysql", "mongodb"]:
+                return True
+        return False
 
     def _has_redis_dependencies(self, service_def: ServiceDefinition) -> bool:
         """Check if service has Redis dependencies."""
         datastores = service_def.dependencies.get("datastores", [])
-        return any(ds.type == "redis" for ds in datastores if hasattr(ds, "type"))
+        for ds in datastores:
+            if hasattr(ds, "type"):
+                if ds.type == "redis":
+                    return True
+            elif isinstance(ds, dict) and ds.get("type") == "redis":
+                return True
+        return False
+
+    def _has_custom_functions(self, service_def: ServiceDefinition) -> bool:
+        """Check if service needs custom functions."""
+        for endpoint in service_def.endpoints:
+            for step in endpoint.workflow:
+                if "custom_function" in step.template:
+                    return True
+        return False

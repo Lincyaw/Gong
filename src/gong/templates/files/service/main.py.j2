@@ -1,0 +1,160 @@
+"""
+{{ service_name }} - Generated microservice
+"""
+
+import asyncio
+import logging
+import os
+from contextlib import asynccontextmanager
+from typing import Dict, Any
+
+import httpx
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+import uvicorn
+
+{% if has_database %}
+from sqlalchemy.ext.asyncio import AsyncSession
+from .database import get_db_session, init_database
+{% endif %}
+
+{% if has_redis %}
+import redis.asyncio as redis
+{% endif %}
+
+# OpenTelemetry imports
+from opentelemetry import trace
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+{% if has_custom_functions %}
+from .functions import *
+{% endif %}
+
+from .config import settings
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    # Setup OpenTelemetry
+    trace.set_tracer_provider(TracerProvider())
+    tracer = trace.get_tracer(__name__)
+    
+    # Setup Jaeger exporter
+    jaeger_exporter = JaegerExporter(
+        agent_host_name=settings.JAEGER_HOST,
+        agent_port=settings.JAEGER_PORT,
+    )
+    span_processor = BatchSpanProcessor(jaeger_exporter)
+    trace.get_tracer_provider().add_span_processor(span_processor)
+    
+    # Instrument FastAPI and HTTP client
+    FastAPIInstrumentor.instrument_app(app)
+    HTTPXClientInstrumentor().instrument()
+    
+    # Initialize HTTP client
+    global http_client
+    http_client = httpx.AsyncClient(timeout=30.0)
+    
+    {% if has_database %}
+    # Initialize database
+    await init_database()
+    {% endif %}
+    
+    yield
+    
+    # Shutdown
+    # Cleanup HTTP client
+    if http_client:
+        await http_client.aclose()
+
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="{{ service_name }}",
+    description="Generated microservice for {{ service_name }}",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Global HTTP client
+http_client: httpx.AsyncClient = None
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "service": settings.SERVICE_NAME,
+        "version": "1.0.0"
+    }
+
+
+{% for endpoint in endpoints %}
+@app.{{ endpoint.method }}("{{ endpoint.path }}")
+async def {{ endpoint.function_name }}(
+    {%- if endpoint.has_path_params -%}
+    {%- for param in endpoint.path_params -%}
+    {{ param }}: str{{ ", " if not loop.last or endpoint.needs_request_body }}
+    {%- endfor -%}
+    {%- endif -%}
+    {%- if endpoint.needs_request_body -%}
+    request: Request
+    {%- endif -%}
+):
+    """Generated endpoint for {{ endpoint.path }}."""
+    try:
+        # Initialize workflow context
+        context = {}
+        
+        {% if endpoint.has_path_params %}
+        # Add path parameters to context
+        {% for param in endpoint.path_params %}
+        context['{{ param }}'] = {{ param }}
+        {% endfor %}
+        {% endif %}
+        
+        {% if endpoint.needs_request_body %}
+        # Add request body to context
+        try:
+            body = await request.json()
+            context['body'] = body
+        except:
+            context['body'] = {}
+        {% endif %}
+        
+        # Execute workflow
+        {% for step in endpoint.workflow_steps %}
+        # Step: {{ step.name }}
+{{ step.code_snippet | indent(8, True) }}
+        {% endfor %}
+        
+        # Return response
+        return context.get('response', {"status": "success"})
+        
+    except Exception as e:
+        logger.error(f"Error in {{ endpoint.function_name }}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+{% endfor %}
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False,
+        log_level=settings.LOG_LEVEL.lower()
+    )

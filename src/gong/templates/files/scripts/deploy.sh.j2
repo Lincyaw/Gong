@@ -1,0 +1,51 @@
+#!/bin/bash
+set -e
+
+echo "🚀 Deploying {{ simulation_name }} simulation..."
+
+# Configuration
+NAMESPACE="{{ namespace }}"
+SIMULATION_NAME="{{ simulation_name }}"
+
+# Create namespace
+echo "📦 Creating namespace..."
+kubectl apply -f k8s/namespace.yaml
+
+# Deploy datastores first
+echo "🗄️  Deploying datastores..."
+{% for datastore in datastores %}
+if [ -f "k8s/{{ datastore.name }}.yaml" ]; then
+    echo "  Deploying {{ datastore.name }} ({{ datastore.type }})..."
+    kubectl apply -f k8s/{{ datastore.name }}.yaml
+fi
+{% endfor %}
+
+# Wait for datastores to be ready
+echo "⏳ Waiting for datastores to be ready..."
+{% for datastore in datastores %}
+kubectl wait --for=condition=available --timeout=300s deployment/{{ datastore.name }} -n ${NAMESPACE} || echo "Warning: {{ datastore.name }} may not be ready"
+{% endfor %}
+
+# Build and deploy services
+echo "🔧 Building and deploying services..."
+{% for service in services %}
+
+# Build {{ service.name }}
+echo "🔨 Building {{ service.name }}..."
+cd {{ service.name }}
+docker build -t {{ service.name }}:latest .
+cd ..
+
+# Deploy {{ service.name }}
+echo "🚀 Deploying {{ service.name }}..."
+kubectl apply -f {{ service.name }}/k8s/
+{% endfor %}
+
+# Wait for all services to be ready
+echo "⏳ Waiting for services to be ready..."
+kubectl wait --for=condition=available --timeout=300s deployment --all -n ${NAMESPACE}
+
+echo "✅ Deployment completed!"
+echo "🔍 Check status with: kubectl get pods -n ${NAMESPACE}"
+echo "📊 View logs with: kubectl logs -f deployment/<service-name> -n ${NAMESPACE}"
+echo "🌐 Port forward with: kubectl port-forward service/<service-name> 8080:8000 -n ${NAMESPACE}"

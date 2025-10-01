@@ -1,0 +1,1 @@
+uv run gong generate-code examples/yaml-driven/simple-demo.yaml -o output/simple

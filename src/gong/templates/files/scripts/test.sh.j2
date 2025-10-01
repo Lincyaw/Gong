@@ -1,0 +1,71 @@
+#!/bin/bash
+set -e
+
+echo "🧪 Testing {{ simulation_name }} simulation..."
+
+# Configuration
+NAMESPACE="{{ namespace }}"
+
+# Check if namespace exists
+if ! kubectl get namespace ${NAMESPACE} >/dev/null 2>&1; then
+    echo "❌ Namespace ${NAMESPACE} not found. Please deploy first."
+    exit 1
+fi
+
+# Check pod status
+echo "📊 Checking pod status..."
+kubectl get pods -n ${NAMESPACE}
+
+# Check service status
+echo "🔍 Checking service status..."
+kubectl get services -n ${NAMESPACE}
+
+# Test datastore health
+echo "🗄️  Testing datastore health..."
+{% for datastore in datastores %}
+echo "  Testing {{ datastore.name }} ({{ datastore.type }})..."
+{% if datastore.type == 'postgres' %}
+kubectl exec -n ${NAMESPACE} deployment/{{ datastore.name }} -- pg_isready -U postgres || echo "❌ {{ datastore.name }} health check failed"
+{% elif datastore.type == 'redis' %}
+kubectl exec -n ${NAMESPACE} deployment/{{ datastore.name }} -- redis-cli ping || echo "❌ {{ datastore.name }} health check failed"
+{% endif %}
+{% endfor %}
+
+# Test service health endpoints
+echo "🏥 Testing service health..."
+{% for service in services %}
+echo "  Testing {{ service.name }}..."
+kubectl exec -n ${NAMESPACE} deployment/{{ service.name }} -- curl -f http://localhost:{{ service.port | default(8000) }}/health || echo "❌ {{ service.name }} health check failed"
+{% endfor %}
+
+# Test service connectivity
+echo "🌐 Testing service connectivity..."
+{% for service in services %}
+{% if service.dependencies.services %}
+{% for dep_service in service.dependencies.services %}
+echo "  Testing {{ service.name }} -> {{ dep_service }}..."
+kubectl exec -n ${NAMESPACE} deployment/{{ service.name }} -- curl -f http://{{ dep_service }}.${NAMESPACE}.svc.cluster.local:8000/health || echo "❌ {{ service.name }} -> {{ dep_service }} connectivity failed"
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+# Performance test (optional)
+read -p "🚀 Do you want to run a basic performance test? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "🏃 Running basic performance test..."
+    {% for service in services %}
+    {% if service.endpoints %}
+    {% for endpoint in service.endpoints %}
+    {% if endpoint.method == 'GET' %}
+    echo "  Testing {{ service.name }}{{ endpoint.path }}..."
+    kubectl run test-pod --rm -i --tty --image=curlimages/curl --restart=Never -n ${NAMESPACE} -- \
+        curl -w "Time: %{time_total}s, Status: %{http_code}\n" \
+        http://{{ service.name }}.${NAMESPACE}.svc.cluster.local:{{ service.port | default(8000) }}{{ endpoint.path | replace('{user_id}', '1') | replace('{product_id}', '1') | replace('{order_id}', '1') }}
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% endfor %}
+fi
+
+echo "✅ Testing completed!"

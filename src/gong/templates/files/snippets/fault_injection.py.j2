@@ -1,0 +1,25 @@
+# Fault injection
+import random
+{% for fault in faults %}
+{% if fault.type == 'latency' %}
+if random.random() < {{ fault.probability }}:
+    # Inject latency fault
+    {% if 'normal(' in fault.value %}
+    import numpy as np
+    mean, stddev = {{ fault.value.split('(')[1].split(')')[0].split(',') }}
+    delay = max(0, np.random.normal({{ mean }}, {{ stddev }})) / 1000
+    {% else %}
+    delay = {{ fault.value }} / 1000
+    {% endif %}
+    await asyncio.sleep(delay)
+{% elif fault.type == 'error' %}
+if random.random() < {{ fault.probability }}:
+    # Inject error fault
+    raise HTTPException(status_code=500, detail="Injected fault: {{ fault.type }}")
+{% elif fault.type == 'corrupt_response' %}
+if random.random() < {{ fault.probability }}:
+    # Inject response corruption
+    logger.warning("Response corruption injected")
+    # This would modify the response in a real implementation
+{% endif %}
+{% endfor %}

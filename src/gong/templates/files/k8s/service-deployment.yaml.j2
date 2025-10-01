@@ -1,0 +1,131 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ service.name }}
+  namespace: {{ namespace }}
+  labels:
+    app: {{ service.name }}
+    type: microservice
+    simulation: {{ simulation_name }}
+    managed-by: gong
+spec:
+  replicas: {{ service.replicas | default(1) }}
+  selector:
+    matchLabels:
+      app: {{ service.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ service.name }}
+        type: microservice
+        simulation: {{ simulation_name }}
+        version: "{{ service.version | default('1.0.0') }}"
+    spec:
+      containers:
+      - name: {{ service.name }}
+        image: {{ service.image | default(service.name + ':latest') }}
+        ports:
+        - containerPort: {{ service.port | default(8000) }}
+          name: http
+        env:
+        - name: SERVICE_NAME
+          value: "{{ service.name }}"
+        - name: NAMESPACE
+          value: "{{ namespace }}"
+        - name: SIMULATION_NAME
+          value: "{{ simulation_name }}"
+        {% for env_var in service.environment | default([]) %}
+        - name: {{ env_var.name }}
+          value: "{{ env_var.value }}"
+        {% endfor %}
+        {% if service.dependencies.datastores %}
+        # Database connection environment variables
+        {% for datastore in service.dependencies.datastores %}
+        {% if datastore.type == 'postgres' %}
+        - name: {{ datastore.name | upper }}_HOST
+          value: "{{ datastore.name }}.{{ namespace }}.svc.cluster.local"
+        - name: {{ datastore.name | upper }}_PORT
+          value: "5432"
+        - name: {{ datastore.name | upper }}_DATABASE
+          value: "postgres"
+        - name: {{ datastore.name | upper }}_USERNAME
+          value: "postgres"
+        - name: {{ datastore.name | upper }}_PASSWORD
+          value: "password"
+        {% elif datastore.type == 'redis' %}
+        - name: {{ datastore.name | upper }}_HOST
+          value: "{{ datastore.name }}.{{ namespace }}.svc.cluster.local"
+        - name: {{ datastore.name | upper }}_PORT
+          value: "6379"
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+        resources:
+          requests:
+            cpu: {{ service.resources.requests.cpu | default("100m") }}
+            memory: {{ service.resources.requests.memory | default("128Mi") }}
+          limits:
+            cpu: {{ service.resources.limits.cpu | default("500m") }}
+            memory: {{ service.resources.limits.memory | default("512Mi") }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ service.name }}
+  namespace: {{ namespace }}
+  labels:
+    app: {{ service.name }}
+    type: microservice
+    simulation: {{ simulation_name }}
+spec:
+  selector:
+    app: {{ service.name }}
+  ports:
+  - port: {{ service.port | default(8000) }}
+    targetPort: http
+    name: http
+  type: ClusterIP
+---
+{% if service.autoscaling.enabled | default(false) %}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ service.name }}-hpa
+  namespace: {{ namespace }}
+  labels:
+    app: {{ service.name }}
+    type: microservice
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ service.name }}
+  minReplicas: {{ service.autoscaling.min_replicas | default(1) }}
+  maxReplicas: {{ service.autoscaling.max_replicas | default(10) }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ service.autoscaling.target_cpu | default(70) }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ service.autoscaling.target_memory | default(80) }}
+{% endif %}

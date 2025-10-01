@@ -1,0 +1,20 @@
+# JWT token validation (simplified)
+token = "{{ params.token }}"
+if token.startswith('{'):
+    # Extract from context
+    token_path = token[1:-1]  # Remove { }
+    if token_path.startswith('header.'):
+        token = context.get('header', {}).get(token_path[7:], '')
+    else:
+        token = context.get(token_path, '')
+
+if not token or not token.startswith('Bearer '):
+    {% if step.on_failure %}
+    # Handle failure: {{ step.on_failure }}
+    raise HTTPException(status_code=401, detail='Invalid or missing token')
+    {% else %}
+    raise HTTPException(status_code=401, detail='Invalid token')
+    {% endif %}
+
+# Simplified validation - in real implementation, verify JWT signature
+result = {"user_id": "validated_user", "permissions": ["read", "write"]}

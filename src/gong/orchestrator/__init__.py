@@ -1,3 +1,3 @@
 """
-Deployment orchestration engine.
+Orchestration module for Kubernetes deployment.
 """
