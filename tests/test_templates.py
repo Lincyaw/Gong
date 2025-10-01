@@ -56,7 +56,7 @@ async def test_template_registry(template_registry):
 @pytest.mark.asyncio
 async def test_template_not_found(template_registry):
     """Test template not found error."""
-    from jinja2 import TemplateNotFound
-
-    with pytest.raises(TemplateNotFound):
+    with pytest.raises(KeyError) as exc_info:
         await template_registry.get_template("nonexistent/template")
+
+    assert "nonexistent/template" in str(exc_info.value)
