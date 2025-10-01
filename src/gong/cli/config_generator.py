@@ -111,10 +111,12 @@ class ConfigDrivenGenerator:
 
         # Generate namespace using template
         namespace_template = self.jinja_env.get_template("k8s/namespace.yaml.j2")
+        # Use timestamp format compatible with Kubernetes labels (no colons)
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
         namespace_manifest = namespace_template.render(
             namespace=f"sim-{spec.name}",
             simulation_name=spec.name,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=timestamp,
         )
         (k8s_dir / "namespace.yaml").write_text(namespace_manifest)
 
@@ -125,11 +127,13 @@ class ConfigDrivenGenerator:
 
     def _collect_datastores(self, spec: SimulationSpec) -> dict[str, dict[str, Any]]:
         """Collect all unique datastores from all services."""
+        from ..core.models import DatastoreDependency
+
         datastores = {}
 
         for service in spec.services:
             for datastore in service.dependencies.get("datastores", []):
-                if hasattr(datastore, "name"):  # DatastoreDependency object
+                if isinstance(datastore, DatastoreDependency):  # DatastoreDependency object
                     config = {
                         "name": datastore.name,
                         "type": datastore.type,
@@ -139,14 +143,25 @@ class ConfigDrivenGenerator:
                     }
                     datastores[datastore.name] = config
                 elif isinstance(datastore, dict):  # Dict format
+                    datastore_dict = datastore  # type: ignore
                     config = {
-                        "name": datastore["name"],
-                        "type": datastore["type"],
-                        "provisioning": datastore.get("provisioning", {}),
-                        "resources": datastore.get("resources", {}),
-                        "persistence": datastore.get("persistence", {}),
+                        "name": datastore_dict["name"],
+                        "type": datastore_dict["type"],
+                        "provisioning": datastore_dict.get("provisioning", {}),
+                        "resources": datastore_dict.get("resources", {}),
+                        "persistence": datastore_dict.get("persistence", {}),
                     }
-                    datastores[datastore["name"]] = config
+                    datastores[datastore_dict["name"]] = config
+                elif isinstance(datastore, str):
+                    # Simple string format - create default config
+                    config = {
+                        "name": datastore,
+                        "type": "postgres",  # Default to postgres
+                        "provisioning": {},
+                        "resources": {},
+                        "persistence": {},
+                    }
+                    datastores[datastore] = config
 
         return datastores
 
@@ -175,11 +190,17 @@ class ConfigDrivenGenerator:
                     "resources": config.get("resources", {}),
                     "persistence": config.get("persistence", {}),
                     "replicas": config.get("replicas", 1),
-                    "image": config.get("image"),
-                    "database_name": config.get("database_name"),
-                    "username": config.get("username"),
-                    "password": config.get("password"),
                 }
+
+                # Only add optional fields if they have values
+                if config.get("image"):
+                    context["image"] = config["image"]
+                if config.get("database_name"):
+                    context["database_name"] = config["database_name"]
+                if config.get("username"):
+                    context["username"] = config["username"]
+                if config.get("password"):
+                    context["password"] = config["password"]
 
                 manifest = template.render(**context)
                 (k8s_dir / f"{name}.yaml").write_text(manifest)

@@ -1,11 +1,11 @@
-# PostgreSQL query
-from sqlalchemy import text
-async with get_db_session() as session:
-    query = "{{ params.query }}"
-    {% if params.get('params') %}
-    query_params = {{ params.params }}
-    result = await session.execute(text(query), query_params)
-    {% else %}
-    result = await session.execute(text(query))
-    {% endif %}
-    result = result.fetchall()
+        # PostgreSQL query
+        from sqlalchemy import text
+        async with get_db_session() as session:
+            query = "{{ params.query }}"
+            {% if params.get('params') %}
+            query_params = {{ params.params }}
+            result = await session.execute(text(query), query_params)
+            {% else %}
+            result = await session.execute(text(query))
+            {% endif %}
+            result = result.fetchall()
