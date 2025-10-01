@@ -264,6 +264,6 @@ class FileBasedTemplateRegistry(TemplateRegistry):
             "description": registry_data.get("description", ""),
             "template_count": len(self._templates),
             "categories": list(
-                set(template.metadata.category for template in self._templates.values())
+                {template.metadata.category for template in self._templates.values()}
             ),
         }

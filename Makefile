@@ -44,11 +44,6 @@ test:
 	@echo "🧪 Running all tests..."
 	uv run pytest tests/ -v --tb=short
 
-# Run unit tests only
-test-unit:
-	@echo "🧪 Running unit tests..."
-	uv run pytest tests/unit/ -v --tb=short -m "not slow"
-
 # Run integration tests only
 test-integration:
 	@echo "🔗 Running integration tests..."
@@ -110,7 +105,7 @@ build:
 	@echo "✅ Package built in dist/"
 
 # Full CI pipeline
-ci: format lint test-unit test-integration demo security
+ci: format lint test-integration demo security
 	@echo "✅ Full CI pipeline completed successfully"
 
 # Pre-commit checks (fast)

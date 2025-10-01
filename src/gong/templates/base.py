@@ -52,7 +52,7 @@ class BaseTemplate(Template):
 class InMemoryTemplateRegistry(TemplateRegistry):
     """In-memory template registry implementation."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._templates: dict[str, Template] = {}
         self._initialize_builtin_templates()
 

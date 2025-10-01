@@ -14,7 +14,7 @@ from ..templates.loader import TemplateLoader
 class ServiceCodeGenerator:
     """Generate FastAPI service code from service definitions."""
 
-    def __init__(self, template_dir: str = None):
+    def __init__(self, template_dir: str | None = None) -> None:
         self.template_loader = TemplateLoader(template_dir)
 
         # Initialize Jinja2 environment
@@ -25,7 +25,7 @@ class ServiceCodeGenerator:
             lstrip_blocks=True,
         )
 
-    async def generate_service_code(self, service_def: ServiceDefinition, output_dir: Path):
+    async def generate_service_code(self, service_def: ServiceDefinition, output_dir: Path) -> None:
         """Generate complete service code."""
 
         # Create directory structure
@@ -250,3 +250,25 @@ class ServiceCodeGenerator:
                 if "custom_function" in step.template:
                     return True
         return False
+
+    async def generate_service(self, service_def: ServiceDefinition) -> dict[str, str]:
+        """Generate complete service code. Returns dict of filename -> content."""
+        # Create a temporary directory for generation
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            await self.generate_service_code(service_def, temp_path)
+
+            # Collect all generated files
+            files = {}
+            for file_path in temp_path.rglob("*"):
+                if file_path.is_file():
+                    relative_path = file_path.relative_to(temp_path)
+                    files[str(relative_path)] = file_path.read_text(encoding="utf-8")
+
+            return files
+
+
+# Alias for backward compatibility
+FastAPIServiceGenerator = ServiceCodeGenerator

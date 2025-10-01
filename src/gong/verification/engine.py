@@ -16,7 +16,7 @@ from ..core.interfaces import VerificationEngine
 class KubernetesVerificationEngine(VerificationEngine):
     """Kubernetes-based verification engine."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.v1 = client.CoreV1Api()
         self.apps_v1 = client.AppsV1Api()
 

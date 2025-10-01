@@ -19,7 +19,7 @@ from ..templates.registry import FileBasedTemplateRegistry
 class ConfigDrivenGenerator:
     """Generate microservices from YAML configuration files."""
 
-    def __init__(self, template_dir: Path = None):
+    def __init__(self, template_dir: Path | None = None) -> None:
         self.service_generator = ServiceCodeGenerator()
         self.k8s_generator = KubernetesManifestGenerator()
 
@@ -35,7 +35,7 @@ class ConfigDrivenGenerator:
             loader=FileSystemLoader(self.template_dir), trim_blocks=True, lstrip_blocks=True
         )
 
-    async def generate_from_config(self, config_file: str, output_dir: str = None) -> Path:
+    async def generate_from_config(self, config_file: str, output_dir: str | None = None) -> Path:
         """Generate complete project from YAML configuration file."""
 
         # Load and validate configuration

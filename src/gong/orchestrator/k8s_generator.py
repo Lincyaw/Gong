@@ -13,7 +13,7 @@ from ..core.models import ServiceDefinition
 class KubernetesManifestGenerator:
     """Generate Kubernetes manifests for services."""
 
-    def __init__(self, template_dir: str = None):
+    def __init__(self, template_dir: str | None = None) -> None:
         if template_dir:
             self.template_dir = Path(template_dir)
         else:

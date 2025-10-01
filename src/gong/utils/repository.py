@@ -9,7 +9,7 @@ from ..core.models import Simulation
 class InMemorySimulationRepository(SimulationRepository):
     """In-memory simulation repository for development."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._simulations: dict[str, Simulation] = {}
 
     async def save_simulation(self, simulation: Simulation) -> None:

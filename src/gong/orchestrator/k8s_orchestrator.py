@@ -15,7 +15,7 @@ from ..core.models import Simulation, SimulationStatus
 class KubernetesOrchestrator(Orchestrator):
     """Kubernetes-based simulation orchestrator."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Load Kubernetes configuration
         try:
             k8s_config.load_incluster_config()

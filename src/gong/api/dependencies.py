@@ -17,7 +17,7 @@ from ..core.interfaces import (
     TrafficGenerator,
     VerificationEngine,
 )
-from ..generator.service_generator import FastAPIServiceGenerator
+from ..generator.service_generator import ServiceCodeGenerator as FastAPIServiceGenerator
 from ..llm.architect import DummyLLMArchitect
 from ..orchestrator.k8s_orchestrator import KubernetesOrchestrator
 from ..orchestrator.scenario_manager import ScenarioManager
@@ -43,7 +43,7 @@ class Dependencies:
     scenario_manager: ScenarioManager
 
 
-_dependencies: Dependencies = None
+_dependencies: Dependencies | None = None
 
 
 def get_dependencies() -> Dependencies:
@@ -58,7 +58,7 @@ def get_dependencies() -> Dependencies:
 
         # Initialize core dependencies
         template_registry = InMemoryTemplateRegistry()
-        code_generator = FastAPIServiceGenerator(template_registry)
+        code_generator = FastAPIServiceGenerator(None)  # Use default template directory
         simulation_repo = InMemorySimulationRepository()
         llm_architect = DummyLLMArchitect()
 

@@ -12,7 +12,8 @@ from ..core.models import Simulation
 class DummyOrchestrator(Orchestrator):
     """Dummy orchestrator for development."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        self.running_simulations: dict[str, dict[str, Any]] = {}
         self.simulations: dict[str, dict[str, Any]] = {}
 
     async def deploy_simulation(self, simulation: Simulation) -> None:

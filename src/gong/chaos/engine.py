@@ -21,7 +21,7 @@ from ..core.interfaces import ChaosEngine
 class KubernetesChaosEngine(ChaosEngine):
     """Kubernetes-based chaos engineering engine."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.v1 = client.CoreV1Api()
         self.apps_v1 = client.AppsV1Api()
         self.networking_v1 = client.NetworkingV1Api()

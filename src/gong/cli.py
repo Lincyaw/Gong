@@ -344,8 +344,6 @@ async def generate_code(
 
             # Save configuration if requested
             if save_config:
-                from pathlib import Path
-
                 import yaml
 
                 config_path = Path(output_dir) / "simulation.yaml"

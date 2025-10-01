@@ -4,6 +4,7 @@ Action executor for LLM Agent interactions.
 
 import asyncio
 from datetime import datetime
+from typing import Any
 
 from kubernetes import client
 from kubernetes.client.rest import ApiException
@@ -15,7 +16,8 @@ from ..core.models import ActionRequest, ActionResult
 class KubernetesActionExecutor(ActionExecutor):
     """Kubernetes-based action executor for LLM agents."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        self.running_actions: dict[str, dict[str, Any]] = {}
         self.v1 = client.CoreV1Api()
         self.apps_v1 = client.AppsV1Api()
 
